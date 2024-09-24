@@ -1,0 +1,123 @@
+# Everytime you wnat to access a certain value from register odule variable
+# Debug and output it to terminal to see how you will get it 
+# If it is Dic or List or whatever it gives you 
+# Or head back to its documentation to see if the pattern already specified
+
+
+
+---
+
+# 1 Play	
+- name: Install java and net-tools
+  hosts: nexus_server
+  tasks:
+    - name: Update apt repo and cache
+      ansible.builtin.apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+    - name: Install Java 8
+      ansible.builtin.apt: name=openjdk-8-jre-headless      
+    - name: Install net-tools
+      ansible.builtin.apt: name=net-tools  
+
+# 2 Play
+- name: Download and unpack Nexus installer
+  hosts: nexus_server
+  tasks: 
+    - name: Check nexus folder stats
+    # state module retrieve file or file system status
+      ansible.builtin.stat:
+        path: /opt/nexus
+      register: stat_result  
+    - name: Download Nexus
+    # get_url module
+      ansible.builtin.get_url: 
+        url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+        dest: /opt/
+      register: download_result  
+    - name: Untar nexus installer
+      ansible.builtin.unarchive:
+      # to keep everting automated instead of sshing to the sereever to see what version got downloaded as that url
+      # always gives us the lateset version,, so we passing it to a var inside that module and refrencing it
+      # with the desired key from that value remeber as it is a {DIC} 
+        src: "{{download_result.dest}}"
+        dest: /opt/ 
+        remote_src: yes   
+      # when applies to single task  
+      # we will use the output of state module task  
+      when: not stat_result.stat.exists    
+    - name: Find nexus folder
+      ansible.builtin.find: 
+        paths: /opt
+        pattern: "nexus-*"
+        file_type: directory
+      register: find_result
+    - name: Rename nexus folder
+      ansible.builtin.shell: mv {{find_result.files[0].path}} /opt/nexus
+      when: not stat_result.stat.exists  
+
+# 3 Play
+- name: Create nexus user to own nexus folders
+  hosts: nexus_server
+  tasks:
+    - name: Ensure group nexus exists
+    # Group Module..
+      ansible.builtin.group: 
+        name: nexus
+        state: present
+    - name: Create nexus user
+    # User Module
+      ansible.builtin.user: 
+        name: nexus
+        group: nexus
+    - name: Make nexus user owner of nexus folder
+    # File Module manges files and files ownerships and properties
+    # recurse = -R which we type with the command to appply that to the directory and its file..
+      ansible.builtin.file: 
+        path: /opt/nexus
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: yes    
+    - name: Make nexus user owner of sonatype-work folder
+      ansible.builtin.file:
+        path: /opt/sonatype-work
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: yes
+
+# 4 Play
+- name: Start nexus with nexus user
+  hosts: nexus_server
+  # To do all of that with nexus user
+  become: True
+  become_user: nexus     
+  tasks:
+    - name: Set run_as_user nexus
+    # lineinfle module to ensure that particular line is in file or edit one line using regex[
+    # replace module to change multible line
+      ansible.builtin.lineinfile:
+        path: /opt/nexus/bin/nexus.rc
+        # (#run_as_user="") is the line we want to replace ('^') is the regexp syntax
+        regexp: '^#run_as_user=""'
+        line: run_as_user="nexus"
+    - name: Start nexus
+      ansible.builtin.command: /opt/nexus/bin/nexus start
+
+# We dont want to ssh to the server to see if everthing is running or not
+# We want to automate the whole process instead
+# 5 Play
+- name: Verify nexus running
+  hosts: nexus_server
+  tasks:
+    - name: Check with ps
+      ansible.builtin.shell: ps aux | grep nexus
+      register: app_status
+    - ansible.builtin.debug: msg={{app_status.stdout_lines}}
+    - name: Wait one minute
+    # pause module waits for 1 minute untill the nexus port is opened
+      ansible.builtin.pause:
+        minutes: 1
+    - name: Check with netstat
+      ansible.builtin.shell: netstat -plnt
+      register: app_status
+    - ansible.builtin.debug: msg={{app_status.stdout_lines}}

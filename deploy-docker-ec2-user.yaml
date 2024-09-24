@@ -1,0 +1,93 @@
+# namespace.collection.module name = FQCN (Fully Qualified Collection name) USE it always instaed of just the module name##
+
+# Everytime you wnat to access a certain value from register odule variable
+# Debug and output it to terminal to see how you will get it 
+# If it is Dic or List or whatever it gives you 
+# Or head back to its documentation to see if the pattern already specified
+
+# Command module is for executing those commands that you can cover using modules..
+
+# Commad & Shell : use them only when there are no appropiate ansible modules available to use.
+# Because they dont have state mangement.
+
+---
+
+# 1 Play 
+
+- name: Install python3, docker, docker-compose
+  hosts: docker_server
+  # Become root user
+  become: yes
+  gather_facts: False
+  tasks:
+  # ANSIBLE use Python2 intrepreter as default
+  # So we install python3 and make it the default in the ansible.cfg file...
+  # But here is the problem it wont be possible if we didnt install python3 already
+    - name: Install python3 and docker
+        # So we only installing Python2 to install Python3 ONLY here
+        # And we cant execute yum with Python3 also se we using Python2
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+      ansible.builtin.yum: 
+        name: 
+          - python3
+          - docker
+        update_cache: yes
+        state: present
+    # Docker Compose is not a yum package so we cant install it with yum    
+    - name: Install Docker-compose
+      ansible.builtin.get_url:      
+# lookup is Ansible specific extension to jinja2 templating langauage :it allow ansible to access data from outside sources 
+        url: https://github.com/docker/compose/releases/download/1.27.4/docker-compose-Linux-{{lookup('pipe', 'uname -m')}}
+        dest: /usr/local/bin/docker-compose
+        mode: +x
+    - name: Start docker daemon
+      ansible.builtin.systemd:   # equal = sudo systemctl start docker 
+        name: docker
+        state: started
+        # To be able docker module for operation like building or pulling an image ...etc
+    - name: Install docker python module
+      ansible.builtin.pip:
+        name: 
+          - docker
+          - docker-compose
+    
+# 2 Play
+
+- name: Add ec2-user to docker group
+  hosts: docker_server
+  become: yes
+  tasks: 
+    - name: Add ec2-user to docker group
+      ansible.builtin.user: 
+        name: ec2-user
+        groups: docker
+        append: yes
+    - name: Reconnect to server session
+    # Meta module to restart the server after adding ec2-user to the docker group
+    # Inorder to the action to take place
+      ansible.builtin.meta: reset_connection
+
+
+- name: Start docker containers
+  hosts: docker_server
+  # to store my docker repo password surely instead of hardcoding it..
+  vars_files:
+    - project-vars
+  tasks:
+    - name: Copy docker compose
+      ansible.builtin.copy:
+        src: /Users/nanajanashia/Demo-projects/Bootcamp/Exercises/bootcamp-java-mysql-project/docker-compose-full.yaml
+        dest: /home/ec2-user/docker-compose.yaml
+    # To pull our image from private docker repo to be able to run the docker comose file on our server
+    # because it contains that image for sure to run it in a container..
+    - name: Docker login
+      community.docker.docker_login: 
+        registry_url: https://index.docker.io/v1/
+        username: nanajanashia
+        password: "{{docker_password}}"
+    - name: Start container from compose
+      community.docker.docker_compose: 
+        project_src: /home/ec2-user 
+     #   state: present # = docker-compose up
+     #   state: absent # = docker-compose down  

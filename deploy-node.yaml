@@ -1,0 +1,76 @@
+# Everytime you want to access a certain value from register module variable
+# Debug and output it to terminal to see how you will get it 
+# If it is Dic or List or whatever it gives you 
+# can head back to its documentation to see if the pattern already specified
+# we have ro specify vars file in every play we refernce variables in..
+---
+# Play 1
+ # we do those installation with root cause they definitely require root permissions
+ # then we can create the new user and use it for the rest of the playbook
+- name: Install node and npm
+  hosts: 159.89.1.54
+  tasks:
+    - name: Update apt repo and cache
+      ansible.builtin.apt: update_cache=yes force_apt_get=yes cache_valid_time=3600	# apt module
+    - name: Install nodejs and npm
+      ansible.builtin.apt: 	# apt module
+        pkg:        # to install multible packadges at once
+          - nodejs
+          - npm
+
+# Create new user for best practice and sequrity "Usually everywhere do not use root "##
+# Play 2
+- name: Create new linux user for node app
+  hosts: 159.89.1.54    
+  # file with their values
+  vars_files:  # we can specify list of files..
+    - project-vars  
+  tasks:
+    - name: Create linux user
+      ansible.builtin.user:        # user module
+      # public rule when using variable directly aftre colon we have to put it int double quotes ""
+      # so that yaml dont treat it as a dictionary
+        name: "{{linux_name}}"	#user name   # when we use curly braces after a colon we have to enclose it with "  "
+        comment: Node User	# desctibtion to user
+        group: admin		 # user group
+
+# Play 3
+- name: Deploy nodejs app
+  hosts: 159.89.1.54
+  # we tell the play which user will execute all of that..
+  become: True   # because it is false by default 
+              # when we use curly braces after a colon we have to enclose it with "  "
+  become_user: "{{linux_name}}"	# the default is root as we soecify in the "hosts file", so we have to change it..
+  vars_files:    # file with their values
+    - project-vars
+  tasks:
+    - name: Unpack the nodejs file
+      ansible.builtin.unarchive: # Get the tar file direcyly from local machine and unarchive it in the server,
+            # when we use curly braces after a colon we have to enclose it with "  "  
+        src: "{{location}}/nodejs-app-{{version}}.tgz"    # instaed if copying it and then unarchiving, we did the job in one step..
+        dest: "{{user_home_dir}}"  # when we use curly braces after a colon we have to enclose it with "  "
+    - name: Install dependencies
+      community.general.npm:  	# npm module
+        path: "{{user_home_dir}}/package" # Path of the package on remote server..
+    - name: Start the application
+    # Command is more secure than shell as it run commands isolated and not running them directly throgh shell 
+      ansible.builtin.command: 	# command module
+        chdir: "{{user_home_dir}}/package/app"
+        cmd: node server
+      async: 1000  # to make node "server" command work in the background and dont break the terminal operation..
+      poll: 0      # homa el 2 m3 b3d "async&poll"  
+     # y3ne el playbook ht5ls execution w el nodejs app hyfdl sh8al 3 el server 3ady mn 8eer m yfdl m3tl el terminal#### 
+    - name: Ensure app is running
+      # shell module is same as command module but it runs commands in shell so you can use logical operators "| && <>" and
+      # and also env variables that you have available in shell 
+      ansible.builtin.shell: ps aux | grep node	# shell module
+    # register is availble for any type of modules to put the task output in a variable to display it with "debug module" after
+    # we simply put the output of the shell command in a variable using "register" then show it in termainl using debug Module
+      register: app_status    # Variable name = app_status      
+      # otput the "app.status" in the terminal with "debug Module" which is also builtin module.. 
+      # decauuse the var is a dictionary we can access its values with their keys like this ".stdout_lines"
+    - ansible.builtin.debug: msg={{app_status.stdout_lines}}   # we use {{   }} those to refernce a variable in ansible..
+ # "app_status" will return the whole output as a #dictionary# ".stdout_lines" this key will give us only the output we want..
+    
+# command and shell modules are not idempotent so we use Ansible condtiionals in further practice..  #########
+# which means if we excuted the palybook multible time it will start the nodeJs applicatio everytime and that is not idempotent..

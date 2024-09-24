@@ -1,0 +1,21 @@
+---
+- name: Deploy app in new namespace
+# localhost : because we are executing ansible playbook locally but we are
+#actually conncecting to kubernetes cluster so we dont need specific
+#worker node or kubernetes cluster endpoint
+#in the (kubeconfig:) attributre and refencing it by 
+# K8S_AUTH_KUBECONFIG= the file path...
+  hosts: localhost
+  tasks:
+    - name: Create a k8s namespace
+      community.kubernetes.k8s:
+        name: my-app
+        api_version: v1
+        kind: Namespace
+        state: present
+    - name: Deploy nginx app 
+      community.kubernetes.k8s:
+      # Source of nginx deployment kuberntes file..
+        src: ~/Demo-projects/Simple-K8s-Files/nginx-config.yaml
+        state: present
+        namespace: my-app

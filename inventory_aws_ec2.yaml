@@ -1,0 +1,24 @@
+---
+# We want to get servers public DNS dynamically to ansible So we will neglect the hosts file..
+
+# In the Terraform Config file : we will configure the servers to have a public DNS automatically assigned
+# to be able to connect to the servers with ansible from outside the VPC.. for ex: from my LAPTOP
+
+# Enable the plugin and tell it which region we will work at
+plugin: aws_ec2
+regions: 
+  - eu-west-3
+
+# We are grouping the similar instances using their attributes we prefer..
+# We can get our graph of instances using this ( ansible-inventory -i inventory_aws_ec2.yaml --graph) in the terminal
+# that will give us all the info about the instances depending on the region and filters we specified in that yaml file..
+# And then refrence the group name in the (hosts:) part in the ansible playbook 
+keyed_groups:
+  - key: tags
+    prefix: tag
+  - key: instance_type
+    prefix: instance_type
+    
+    
+filters: 
+  tag:Name: dev*  # that will give me onlt the servers with dev tag..   
